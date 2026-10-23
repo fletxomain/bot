@@ -5,8 +5,8 @@ import json
 import time
 import base64
 import os
-import requests
 import random
+from datetime import datetime, timezone, timedelta
 
 app = Flask(__name__)
 
@@ -86,22 +86,17 @@ def main():
             return send_error("Request expired")
 
         # ==========================================
-        # FETCH REAL PERIOD & LOCK RESULT
+        # GENERATE 3-DIGIT PERIOD (NO API)
         # ==========================================
-        current_period = "UNKNOWN"
-        try:
-            api_url = f"https://draw.ar-lottery01.com/WinGo/WinGo_1M/GetHistoryIssuePage.json?t={int(time.time())}"
-            # We send headers to bypass 403 Forbidden
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 10)',
-                'Accept': 'application/json'
-            }
-            api_resp = requests.get(api_url, headers=headers, timeout=5)
-            api_data = api_resp.json()
-            if api_data.get('data') and api_data['data'].get('list'):
-                current_period = str(api_data['data']['list'][0]['issueNumber'])
-        except Exception:
-            current_period = str(int(time.time() / 60)) 
+        # We use Indian Standard Time (UTC + 5:30) for the period
+        tz = timezone(timedelta(hours=5, minutes=30))
+        now = datetime.now(tz)
+        # Calculate total minutes since midnight
+        total_minutes = (now.hour * 60) + now.minute
+        # Create a 3-digit number (e.g., 001 to 999)
+        period_num = str(total_minutes % 900 + 100)
+        
+        current_period = period_num
 
         # Generate new result ONLY if period changes
         if current_period not in PERIOD_CACHE:
@@ -157,13 +152,16 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
 @keyframes radarSweep{{to{{transform:rotate(360deg);}}}}
 @keyframes neonBreathe{{0%,100%{{box-shadow:0 0 15px var(--g3),0 0 30px var(--gn-glow);}}50%{{box-shadow:0 0 22px var(--g1),0 0 45px var(--gn-glow);}}}}
 @keyframes surefireAnim{{0%{{letter-spacing:2px;text-shadow:0 0 12px var(--g1);}}50%{{letter-spacing:4px;text-shadow:0 0 22px var(--gold),0 0 5px #fff;}}100%{{letter-spacing:2px;text-shadow:0 0 12px var(--g1);}}}}
+@keyframes barPulse{{0%,100%{{height:4px;opacity:.3;}}50%{{height:100%;opacity:1;}}}}
 
+/* DRAGGABLE MINI BUTTON */
 #miniBtn{{
   position:fixed;right:20px;bottom:100px; width:58px;height:58px;border-radius:50%;
   background:radial-gradient(circle at 30% 30%,rgba(0,180,80,.9),var(--bg-deep));
   border:2px solid var(--gold); box-shadow:0 0 22px var(--gn-glow),0 0 45px var(--gold-glow),inset 0 4px 6px rgba(255,255,255,0.4);
   cursor:pointer;z-index:9998; display:flex;align-items:center;justify-content:center;
-  animation:float 3.5s ease-in-out infinite, neonBreathe 3s ease-in-out infinite; touch-action:none;
+  animation:float 3.5s ease-in-out infinite, neonBreathe 3s ease-in-out infinite; 
+  touch-action:none;
 }}
 #miniBtn::before{{content:'';position:absolute;inset:-5px;border-radius:50%;border:1.5px dashed var(--gold);animation:spin 8s linear infinite;pointer-events:none;}}
 #miniBtn::after{{content:'';position:absolute;inset:-10px;border-radius:50%;border:1px solid rgba(0,255,136,.5);animation:spinR 12s linear infinite;pointer-events:none;}}
@@ -171,6 +169,7 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
 #miniBtn .custom-logo{{width:42px;height:42px;border:1.5px solid var(--gold);}}
 .lb-dot{{position:absolute;top:-2px;right:-2px;width:11px;height:11px;border-radius:50%;background:radial-gradient(circle,#fff,var(--g1));border:2px solid rgba(0,10,5,.9);animation:pulseDot .85s infinite;z-index:3;}}
 
+/* MAIN PANEL */
 #drac-panel-container{{position:fixed;right:15px;bottom:80px;width:230px;z-index:9999;display:none;touch-action:none;}}
 .panel-hexagon-backing{{position:absolute;inset:-2px;background:linear-gradient(135deg, var(--g3), var(--gold), var(--g3));border-radius:18px;z-index:2;box-shadow:0 0 35px var(--gn-glow), 0 0 55px rgba(0,26,10,0.8);}}
 .panel-body{{position:relative;z-index:5;background:linear-gradient(160deg, rgba(5,30,15,0.8) 0%, rgba(1,10,5,0.96) 100%);backdrop-filter: blur(15px);-webkit-backdrop-filter: blur(15px);border-radius:16px;border-top: 1.5px solid rgba(255,215,0,0.6);border-left: 1px solid rgba(255,255,255,0.2);border-right: 1px solid rgba(255,255,255,0.1);border-bottom: 1px solid rgba(255,255,255,0.1);box-shadow: inset 0 0 20px rgba(0,255,100,0.08), 0 15px 30px rgba(0,0,0,0.9);padding:11px 10px 10px;display:flex;flex-direction:column;gap:6px;overflow:hidden;}}
@@ -195,8 +194,26 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
 .bracket.tl{{top:6px;left:6px;border-width:2px 0 0 2px;}} .bracket.tr{{top:6px;right:6px;border-width:2px 2px 0 0;}}
 .bracket.bl{{bottom:6px;left:6px;border-width:0 0 2px 2px;}} .bracket.br{{bottom:6px;right:6px;border-width:0 2px 2px 0;}}
 
-.view-state{{display:flex;flex-direction:column;align-items:center;width:100%;height:100%;text-align:center;position:relative;z-index:20;justify-content:center;gap:4px;animation:viewIn .5s cubic-bezier(0.25, 1, 0.5, 1) forwards;}}
+/* VIEW STATES */
+.view-state{{display:none;flex-direction:column;align-items:center;width:100%;height:100%;text-align:center;position:relative;z-index:20;justify-content:center;gap:4px;}}
+.view-state.active{{display:flex;animation:viewIn .5s cubic-bezier(0.25, 1, 0.5, 1) forwards;}}
 
+/* SCANNING ANIMATION */
+.scan-visualizer{{position:relative;width:50px;height:50px;display:flex;align-items:center;justify-content:center;margin-bottom:8px;}}
+.arc{{position:absolute;border-radius:50%;border:2px solid transparent;}}
+.arc-1{{inset:0;border-top-color:var(--gold);border-bottom-color:var(--g1);animation:spin .9s cubic-bezier(.68,-.55,.265,1.55) infinite;}}
+.arc-2{{inset:5px;border-left-color:var(--p2);border-right-color:rgba(255,255,255,0.5);animation:spinR 1.4s linear infinite;}}
+.arc-3{{inset:-7px;border:1.5px dotted var(--gold);animation:spin 3.5s linear infinite;}}
+
+.scan-bars{{display:flex;align-items:flex-end;gap:2.5px;height:14px;position:relative;z-index:2;margin-top:4px;}}
+.sbar{{width:4px;border-radius:3px 3px 0 0;background:linear-gradient(180deg,var(--gold),var(--g2));box-shadow:0 0 6px var(--gold);}}
+.sbar:nth-child(1){{animation:barPulse .7s ease-in-out infinite 0s;}}
+.sbar:nth-child(2){{animation:barPulse .7s ease-in-out infinite .1s;}}
+.sbar:nth-child(3){{animation:barPulse .7s ease-in-out infinite .2s;}}
+.sbar:nth-child(4){{animation:barPulse .7s ease-in-out infinite .3s;}}
+.sbar:nth-child(5){{animation:barPulse .7s ease-in-out infinite .4s;}}
+
+/* RESULT LAYOUT */
 #view-result{{justify-content:space-between;padding:4px 2px;}}
 .res-period-top{{font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:900;color:#fff;letter-spacing:1.5px;border-bottom:1px solid rgba(255,215,0,.4);padding-bottom:3px;width:90%;text-align:center;margin-bottom:3px;}}
 .res-period-top span{{color:var(--gold);}}
@@ -214,6 +231,7 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
 
 .res-sureshot-banner{{font-family:'Orbitron',sans-serif;font-size:11px;font-weight:900;border:1.2px solid rgba(255,215,0,.7);padding:4px 14px;border-radius:10px;background:linear-gradient(180deg,rgba(255,215,0,.25) 0%,rgba(0,0,0,.6) 100%);box-shadow:0 0 16px var(--gold-glow);text-shadow:0 0 10px var(--gold);text-transform:uppercase;letter-spacing:2px;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;animation:surefireAnim 2.5s ease-in-out infinite;}}
 
+/* BUTTONS */
 .btn-container{{display:flex;gap:6px;position:relative;z-index:10;}}
 .drac-btn{{flex:1;padding:9px 4px;border:none;border-radius:10px;font-family:'Orbitron',sans-serif;font-size:8px;font-weight:900;letter-spacing:1.2px;cursor:pointer;text-transform:uppercase;color:#fff;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;gap:4px;transition:all .2s ease;}}
 .drac-btn:active{{transform:scale(.94);}}
@@ -223,11 +241,13 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
 </head>
 <body>
 
-<div id="miniBtn" onclick="openPanel()">
+<!-- MINI BUTTON -->
+<div id="miniBtn">
   <img src="https://myimgs.org/storage/images/65497/1000020658.png" class="custom-logo" alt="Logo">
   <div class="lb-dot"></div>
 </div>
 
+<!-- MAIN PANEL -->
 <div id="drac-panel-container">
   <div class="panel-hexagon-backing"></div>
   <div class="panel-body">
@@ -241,7 +261,7 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
     </div>
     
     <div class="period-box" id="mainPeriodBox">
-      <div class="period-text">PERIOD : <span id="periodDisplay">{locked['period'][-4:]}</span></div>
+      <div class="period-text">PERIOD : <span id="periodDisplay">{locked['period']}</span></div>
     </div>
 
     <div class="screen-area">
@@ -250,14 +270,36 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
       <div class="bracket tl"></div><div class="bracket tr"></div>
       <div class="bracket bl"></div><div class="bracket br"></div>
 
+      <!-- STATE 1: READY (EXECUTE BUTTON SHOWS) -->
+      <div class="view-state active" id="view-ready">
+        <div class="header-title" style="font-size:14px; margin-bottom:5px;">AI ENGINE READY</div>
+        <div style="font-family:'Share Tech Mono',monospace; font-size:7px; color:#00ff88; letter-spacing:1px;">CLICK EXECUTE TO SCAN</div>
+      </div>
+
+      <!-- STATE 2: SCANNING (LOADING ANIMATION) -->
+      <div class="view-state" id="view-scan">
+        <div class="scan-visualizer">
+          <div class="arc arc-3"></div>
+          <div class="arc arc-1"></div>
+          <div class="arc arc-2"></div>
+          <img src="https://myimgs.org/storage/images/65497/1000020658.png" class="custom-logo" alt="Logo" style="width:28px;height:28px;z-index:5;">
+        </div>
+        <div class="scan-bars">
+          <div class="sbar"></div><div class="sbar"></div><div class="sbar"></div>
+          <div class="sbar"></div><div class="sbar"></div>
+        </div>
+        <div class="header-title" style="font-size:10px;margin-top:4px;">DECODING MATRIX</div>
+      </div>
+
+      <!-- STATE 3: RESULT (SHOWS AFTER SCANNING) -->
       <div class="view-state" id="view-result">
-        <div class="res-period-top">LOCKED: <span>{locked['period'][-4:]}</span></div>
+        <div class="res-period-top">LOCKED: <span>{locked['period']}</span></div>
         <div class="result-layout">
           <div class="dual-ball-wrapper">
-            <div class="res-ball-container {locked['color']}" id="resBall1">
+            <div class="res-ball-container {locked['color']}">
               <span class="ball-num-txt">{locked['number']}</span>
             </div>
-            <div class="res-ball-container gold" id="resBall2">
+            <div class="res-ball-container gold">
               <span class="ball-num-txt">{locked['number']}</span>
             </div>
           </div>
@@ -269,29 +311,103 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
       </div>
     </div>
 
+    <!-- BUTTONS CONTAINER -->
     <div class="btn-container">
-      <!-- FIXED REFRESH: No longer breaks POST security -->
-      <button class="drac-btn btn-primary" onclick="refreshLock()">REFRESH</button>
-      <button class="drac-btn btn-secondary" onclick="closePanel()">HIDE</button>
+      <!-- Execute (Visible initially) -->
+      <button class="drac-btn btn-primary" id="btnExecute" onclick="runScan()">EXECUTE</button>
+      <!-- Minimize (Visible initially) -->
+      <button class="drac-btn btn-secondary" id="btnHide" onclick="closePanel()">HIDE</button>
     </div>
 
   </div>
 </div>
 
 <script>
+  // --- DRAG LOGIC FOR MINI BUTTON ---
+  var miniBtn = document.getElementById('miniBtn');
+  var isDragging = false, startX, startY, initialLeft, initialTop;
+  var moved = false;
+
+  miniBtn.addEventListener('touchstart', function(e) {{
+    isDragging = true; moved = false;
+    var rect = miniBtn.getBoundingClientRect();
+    initialLeft = rect.left; initialTop = rect.top;
+    startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+    miniBtn.style.right = 'auto'; miniBtn.style.bottom = 'auto';
+    miniBtn.style.left = initialLeft + 'px'; miniBtn.style.top = initialTop + 'px';
+    miniBtn.style.animation = 'none'; // Pause float animation
+  }}, {{passive: true}});
+
+  miniBtn.addEventListener('mousedown', function(e) {{
+    isDragging = true; moved = false;
+    var rect = miniBtn.getBoundingClientRect();
+    initialLeft = rect.left; initialTop = rect.top;
+    startX = e.clientX; startY = e.clientY;
+    miniBtn.style.right = 'auto'; miniBtn.style.bottom = 'auto';
+    miniBtn.style.left = initialLeft + 'px'; miniBtn.style.top = initialTop + 'px';
+    miniBtn.style.animation = 'none';
+    e.preventDefault();
+  }});
+
+  document.addEventListener('touchmove', function(e) {{
+    if(!isDragging) return;
+    var dx = e.touches[0].clientX - startX;
+    var dy = e.touches[0].clientY - startY;
+    if(Math.abs(dx) > 5 || Math.abs(dy) > 5) moved = true;
+    
+    miniBtn.style.left = Math.max(0, Math.min(window.innerWidth - 60, initialLeft + dx)) + 'px';
+    miniBtn.style.top = Math.max(0, Math.min(window.innerHeight - 60, initialTop + dy)) + 'px';
+  }}, {{passive: true}});
+
+  document.addEventListener('mousemove', function(e) {{
+    if(!isDragging) return;
+    var dx = e.clientX - startX;
+    var dy = e.clientY - startY;
+    if(Math.abs(dx) > 5 || Math.abs(dy) > 5) moved = true;
+    
+    miniBtn.style.left = Math.max(0, Math.min(window.innerWidth - 60, initialLeft + dx)) + 'px';
+    miniBtn.style.top = Math.max(0, Math.min(window.innerHeight - 60, initialTop + dy)) + 'px';
+  }});
+
+  document.addEventListener('touchend', function() {{
+    if(isDragging) {{
+        isDragging = false;
+        miniBtn.style.animation = 'float 3.5s ease-in-out infinite, neonBreathe 3s ease-in-out infinite';
+        if(!moved) {{ openPanel(); }} // If not dragged, treat as click
+    }}
+  }});
+  document.addEventListener('mouseup', function() {{
+    if(isDragging) {{
+        isDragging = false;
+        miniBtn.style.animation = 'float 3.5s ease-in-out infinite, neonBreathe 3s ease-in-out infinite';
+        if(!moved) {{ openPanel(); }}
+    }}
+  }});
+
+  // --- PANEL LOGIC ---
   function openPanel(){{
-    document.getElementById('miniBtn').style.display='none';
-    document.getElementById('drac-panel-container').style.display='block';
+    miniBtn.style.display = 'none';
+    document.getElementById('drac-panel-container').style.display = 'block';
   }}
+
   function closePanel(){{
-    document.getElementById('drac-panel-container').style.display='none';
-    document.getElementById('miniBtn').style.display='flex';
+    document.getElementById('drac-panel-container').style.display = 'none';
+    miniBtn.style.display = 'flex';
   }}
-  function refreshLock(){{
-    // Safely closes and asks the app to reload via native bridge if available, 
-    // otherwise just hides the panel to prevent the POST error.
-    closePanel();
-    // If running inside Sketchware WebView, you can trigger a Java interface here.
+
+  // --- EXECUTE ANIMATION ---
+  function runScan(){{
+    document.getElementById('view-ready').classList.remove('active');
+    document.getElementById('view-scan').classList.add('active');
+    document.getElementById('btnExecute').innerText = 'SCANNING...';
+    document.getElementById('btnExecute').style.pointerEvents = 'none';
+
+    setTimeout(function(){{
+      document.getElementById('view-scan').classList.remove('active');
+      document.getElementById('view-result').classList.add('active');
+      document.getElementById('btnExecute').innerText = 'DONE';
+      document.getElementById('btnExecute').style.background = '#004d1a';
+    }}, 2800); // 2.8 seconds loading
   }}
 </script>
 </body>
