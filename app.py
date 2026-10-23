@@ -6,7 +6,6 @@ import time
 import base64
 import os
 import random
-from datetime import datetime, timezone, timedelta
 
 app = Flask(__name__)
 
@@ -14,13 +13,13 @@ app = Flask(__name__)
 # CONFIGURATION
 # ==========================================
 PASSPHRASE = 'FVM-HACKER98'
-MAX_TS_DIFF = 30 # seconds
+MAX_TS_DIFF = 30 
 
-# Derive 32-byte key from passphrase
 KEY = hashlib.sha256(PASSPHRASE.encode('utf-8')).digest()
 
-# In-memory storage for period locking
-PERIOD_CACHE = {}
+# Global dictionary to lock the result. 
+# Format: { "123": {"number": "7", "size": "BIG", "color": "green"} }
+PERIOD_LOCK = {}
 
 def send_error(msg, code=400):
     html = f"""<!DOCTYPE html>
@@ -63,13 +62,11 @@ def main():
         if not data or 'iv' not in data or 'cipher' not in data or 'tag' not in data:
             return send_error("Bad encrypted request")
 
-        # Decode base64
         iv = base64.b64decode(data['iv'])
         ciphertext = base64.b64decode(data['cipher'])
         tag = base64.b64decode(data['tag'])
         combined = ciphertext + tag
 
-        # Decrypt
         aesgcm = AESGCM(KEY)
         try:
             plaintext_bytes = aesgcm.decrypt(iv, combined, None)
@@ -77,7 +74,6 @@ def main():
         except Exception:
             return send_error("Decryption failed. Passphrase mismatch?")
 
-        # Parse decrypted JSON
         payload = json.loads(plaintext)
         if payload.get('action') != "LOAD":
             return send_error("Invalid action")
@@ -86,42 +82,12 @@ def main():
             return send_error("Request expired")
 
         # ==========================================
-        # GENERATE 3-DIGIT PERIOD (NO API)
+        # RETURN HTML (UI & LOGIC)
         # ==========================================
-        # We use Indian Standard Time (UTC + 5:30) for the period
-        tz = timezone(timedelta(hours=5, minutes=30))
-        now = datetime.now(tz)
-        # Calculate total minutes since midnight
-        total_minutes = (now.hour * 60) + now.minute
-        # Create a 3-digit number (e.g., 001 to 999)
-        period_num = str(total_minutes % 900 + 100)
-        
-        current_period = period_num
+        # We embed the PERIOD_LOCK dictionary into the HTML so the frontend 
+        # JS can handle the locking instantly without needing a new POST request.
+        lock_json = json.dumps(PERIOD_LOCK)
 
-        # Generate new result ONLY if period changes
-        if current_period not in PERIOD_CACHE:
-            LOGIC = {
-                0: {'n': '5', 's': 'BIG', 'color': 'violet'}, 1: {'n': '2', 's': 'SMALL', 'color': 'red'},
-                2: {'n': '4', 's': 'SMALL', 'color': 'red'}, 3: {'n': '7', 's': 'BIG', 'color': 'green'},
-                4: {'n': '8', 's': 'BIG', 'color': 'red'}, 5: {'n': '9', 's': 'BIG', 'color': 'green'},
-                6: {'n': '0', 's': 'SMALL', 'color': 'violet'}, 7: {'n': '3', 's': 'SMALL', 'color': 'green'},
-                8: {'n': '6', 's': 'BIG', 'color': 'red'}, 9: {'n': '1', 's': 'SMALL', 'color': 'green'}
-            }
-            k = random.choice(list(LOGIC.keys()))
-            res = LOGIC[k]
-            
-            PERIOD_CACHE[current_period] = {
-                'period': current_period,
-                'number': res['n'],
-                'size': res['s'],
-                'color': res['color']
-            }
-
-        locked = PERIOD_CACHE[current_period]
-
-        # ==========================================
-        # RETURN HTML (CRAVAULT THEME)
-        # ==========================================
         html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -198,11 +164,21 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
 .view-state{{display:none;flex-direction:column;align-items:center;width:100%;height:100%;text-align:center;position:relative;z-index:20;justify-content:center;gap:4px;}}
 .view-state.active{{display:flex;animation:viewIn .5s cubic-bezier(0.25, 1, 0.5, 1) forwards;}}
 
+/* INPUT STATE */
+.input-box{{
+  background: rgba(0,0,0,0.6); border: 1px solid var(--gold); color: #fff;
+  font-family: 'Orbitron', sans-serif; font-size: 18px; font-weight: 900; 
+  width: 100px; text-align: center; padding: 8px; border-radius: 8px;
+  outline: none; letter-spacing: 2px;
+  box-shadow: inset 0 0 10px rgba(255,215,0,0.2);
+}}
+.input-box::placeholder{{color: rgba(255,255,255,0.3);}}
+
 /* SCANNING ANIMATION */
 .scan-visualizer{{position:relative;width:50px;height:50px;display:flex;align-items:center;justify-content:center;margin-bottom:8px;}}
 .arc{{position:absolute;border-radius:50%;border:2px solid transparent;}}
 .arc-1{{inset:0;border-top-color:var(--gold);border-bottom-color:var(--g1);animation:spin .9s cubic-bezier(.68,-.55,.265,1.55) infinite;}}
-.arc-2{{inset:5px;border-left-color:var(--p2);border-right-color:rgba(255,255,255,0.5);animation:spinR 1.4s linear infinite;}}
+.arc-2{{inset:5px;border-left-color:#66ff99;border-right-color:rgba(255,255,255,0.5);animation:spinR 1.4s linear infinite;}}
 .arc-3{{inset:-7px;border:1.5px dotted var(--gold);animation:spin 3.5s linear infinite;}}
 
 .scan-bars{{display:flex;align-items:flex-end;gap:2.5px;height:14px;position:relative;z-index:2;margin-top:4px;}}
@@ -261,7 +237,7 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
     </div>
     
     <div class="period-box" id="mainPeriodBox">
-      <div class="period-text">PERIOD : <span id="periodDisplay">{locked['period']}</span></div>
+      <div class="period-text">PERIOD : <span id="periodDisplay">---</span></div>
     </div>
 
     <div class="screen-area">
@@ -270,13 +246,13 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
       <div class="bracket tl"></div><div class="bracket tr"></div>
       <div class="bracket bl"></div><div class="bracket br"></div>
 
-      <!-- STATE 1: READY (EXECUTE BUTTON SHOWS) -->
+      <!-- STATE 1: INPUT READY -->
       <div class="view-state active" id="view-ready">
-        <div class="header-title" style="font-size:14px; margin-bottom:5px;">AI ENGINE READY</div>
-        <div style="font-family:'Share Tech Mono',monospace; font-size:7px; color:#00ff88; letter-spacing:1px;">CLICK EXECUTE TO SCAN</div>
+        <div class="header-title" style="font-size:12px; margin-bottom:5px;">ENTER PERIOD</div>
+        <input type="number" id="userPeriodInput" class="input-box" placeholder="3-DIGIT" maxlength="3" oninput="limitInput(this)">
       </div>
 
-      <!-- STATE 2: SCANNING (LOADING ANIMATION) -->
+      <!-- STATE 2: SCANNING -->
       <div class="view-state" id="view-scan">
         <div class="scan-visualizer">
           <div class="arc arc-3"></div>
@@ -288,42 +264,47 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
           <div class="sbar"></div><div class="sbar"></div><div class="sbar"></div>
           <div class="sbar"></div><div class="sbar"></div>
         </div>
-        <div class="header-title" style="font-size:10px;margin-top:4px;">DECODING MATRIX</div>
+        <div class="header-title" style="font-size:10px;margin-top:4px;">DECODING</div>
       </div>
 
-      <!-- STATE 3: RESULT (SHOWS AFTER SCANNING) -->
+      <!-- STATE 3: RESULT -->
       <div class="view-state" id="view-result">
-        <div class="res-period-top">LOCKED: <span>{locked['period']}</span></div>
+        <div class="res-period-top">LOCKED: <span id="resPeriodDisplay">---</span></div>
         <div class="result-layout">
           <div class="dual-ball-wrapper">
-            <div class="res-ball-container {locked['color']}">
-              <span class="ball-num-txt">{locked['number']}</span>
+            <div class="res-ball-container" id="resBallColor">
+              <span class="ball-num-txt" id="resNum">0</span>
             </div>
             <div class="res-ball-container gold">
-              <span class="ball-num-txt">{locked['number']}</span>
+              <span class="ball-num-txt" id="resNum2">0</span>
             </div>
           </div>
           <div class="conf-pill-tag">CONF: 98.6% | L1: 85% L2: 90%</div>
           <div class="res-sureshot-banner">
-            <span>{locked['size']}</span>
+            <span id="resSize">BIG</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- BUTTONS CONTAINER -->
     <div class="btn-container">
-      <!-- Execute (Visible initially) -->
-      <button class="drac-btn btn-primary" id="btnExecute" onclick="runScan()">EXECUTE</button>
-      <!-- Minimize (Visible initially) -->
-      <button class="drac-btn btn-secondary" id="btnHide" onclick="closePanel()">HIDE</button>
+      <button class="drac-btn btn-primary" id="btnExecute" onclick="executeLogic()">EXECUTE</button>
+      <button class="drac-btn btn-secondary" onclick="closePanel()">MINIMIZE</button>
     </div>
 
   </div>
 </div>
 
 <script>
-  // --- DRAG LOGIC FOR MINI BUTTON ---
+  // Pass backend lock dictionary to JS
+  var PERIOD_LOCK = {lock_json};
+
+  // Limit input to 3 digits
+  function limitInput(el) {{
+    if (el.value.length > 3) el.value = el.value.slice(0, 3);
+  }}
+
+  // --- DRAG LOGIC ---
   var miniBtn = document.getElementById('miniBtn');
   var isDragging = false, startX, startY, initialLeft, initialTop;
   var moved = false;
@@ -335,7 +316,7 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
     startX = e.touches[0].clientX; startY = e.touches[0].clientY;
     miniBtn.style.right = 'auto'; miniBtn.style.bottom = 'auto';
     miniBtn.style.left = initialLeft + 'px'; miniBtn.style.top = initialTop + 'px';
-    miniBtn.style.animation = 'none'; // Pause float animation
+    miniBtn.style.animation = 'none';
   }}, {{passive: true}});
 
   miniBtn.addEventListener('mousedown', function(e) {{
@@ -354,7 +335,6 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
     var dx = e.touches[0].clientX - startX;
     var dy = e.touches[0].clientY - startY;
     if(Math.abs(dx) > 5 || Math.abs(dy) > 5) moved = true;
-    
     miniBtn.style.left = Math.max(0, Math.min(window.innerWidth - 60, initialLeft + dx)) + 'px';
     miniBtn.style.top = Math.max(0, Math.min(window.innerHeight - 60, initialTop + dy)) + 'px';
   }}, {{passive: true}});
@@ -364,7 +344,6 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
     var dx = e.clientX - startX;
     var dy = e.clientY - startY;
     if(Math.abs(dx) > 5 || Math.abs(dy) > 5) moved = true;
-    
     miniBtn.style.left = Math.max(0, Math.min(window.innerWidth - 60, initialLeft + dx)) + 'px';
     miniBtn.style.top = Math.max(0, Math.min(window.innerHeight - 60, initialTop + dy)) + 'px';
   }});
@@ -373,7 +352,7 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
     if(isDragging) {{
         isDragging = false;
         miniBtn.style.animation = 'float 3.5s ease-in-out infinite, neonBreathe 3s ease-in-out infinite';
-        if(!moved) {{ openPanel(); }} // If not dragged, treat as click
+        if(!moved) {{ openPanel(); }}
     }}
   }});
   document.addEventListener('mouseup', function() {{
@@ -384,10 +363,23 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
     }}
   }});
 
-  // --- PANEL LOGIC ---
+  // --- PANEL OPEN / CLOSE LOGIC ---
   function openPanel(){{
     miniBtn.style.display = 'none';
     document.getElementById('drac-panel-container').style.display = 'block';
+    
+    // RESET TO INPUT STATE EVERY TIME IT OPENS
+    document.getElementById('view-ready').classList.add('active');
+    document.getElementById('view-scan').classList.remove('active');
+    document.getElementById('view-result').classList.remove('active');
+    document.getElementById('userPeriodInput').value = '';
+    document.getElementById('periodDisplay').innerText = '---';
+    
+    // Reset button
+    var btn = document.getElementById('btnExecute');
+    btn.innerText = 'EXECUTE';
+    btn.style.background = 'linear-gradient(180deg,#00b347 0%,#004d1a 100%)';
+    btn.style.pointerEvents = 'auto';
   }}
 
   function closePanel(){{
@@ -395,28 +387,60 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
     miniBtn.style.display = 'flex';
   }}
 
-  // --- EXECUTE ANIMATION ---
-  function runScan(){{
+  // --- MAIN EXECUTE LOGIC ---
+  function executeLogic(){{
+    var period = document.getElementById('userPeriodInput').value.trim();
+    
+    // Must be 3 digits
+    if(period.length !== 3 || isNaN(period)){{
+        alert("Please enter a valid 3-digit period number (e.g., 123).");
+        return;
+    }}
+
+    // Update UI
     document.getElementById('view-ready').classList.remove('active');
     document.getElementById('view-scan').classList.add('active');
-    document.getElementById('btnExecute').innerText = 'SCANNING...';
-    document.getElementById('btnExecute').style.pointerEvents = 'none';
+    document.getElementById('periodDisplay').innerText = period;
 
+    var btn = document.getElementById('btnExecute');
+    btn.innerText = 'SCANNING...';
+    btn.style.pointerEvents = 'none';
+
+    // 2.5 Seconds fake delay for cool animation
     setTimeout(function(){{
-      document.getElementById('view-scan').classList.remove('active');
-      document.getElementById('view-result').classList.add('active');
-      document.getElementById('btnExecute').innerText = 'DONE';
-      document.getElementById('btnExecute').style.background = '#004d1a';
-    }}, 2800); // 2.8 seconds loading
-  }}
-</script>
-</body>
-</html>"""
-        return Response(html, mimetype='text/html')
+        // Check if period is already locked in backend
+        if (!PERIOD_LOCK[period]) {{
+            // Generate new random result and save to frontend memory
+            var nums = ['0','1','2','3','4','5','6','7','8','9'];
+            var randomNum = nums[Math.floor(Math.random() * nums.length)];
+            
+            var size = parseInt(randomNum) >= 5 ? 'BIG' : 'SMALL';
+            var color = '';
+            if (randomNum == '0' || randomNum == '5') color = 'violet';
+            else if (size == 'BIG') color = 'green';
+            else color = 'red';
 
-    except Exception as e:
-        return send_error(f"Server Error: {str(e)}", 500)
+            PERIOD_LOCK[period] = {{
+                n: randomNum,
+                s: size,
+                color: color
+            }};
+        }}
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+        var result = PERIOD_LOCK[period];
+
+        // Render Result
+        document.getElementById('view-scan').classList.remove('active');
+        document.getElementById('view-result').classList.add('active');
+        
+        document.getElementById('resPeriodDisplay').innerText = period;
+        document.getElementById('resNum').innerText = result.n;
+        document.getElementById('resNum2').innerText = result.n;
+        document.getElementById('resSize').innerText = result.s;
+        
+        // Update Color
+        var ball = document.getElementById('resBallColor');
+        ball.className = 'res-ball-container ' + result.color;
+
+        btn.innerText = 'LOCKED';
+        btn.style
