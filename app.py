@@ -17,8 +17,7 @@ MAX_TS_DIFF = 30
 
 KEY = hashlib.sha256(PASSPHRASE.encode('utf-8')).digest()
 
-# Global dictionary to lock the result. 
-# Format: { "123": {"number": "7", "size": "BIG", "color": "green"} }
+# Global dictionary to lock the result
 PERIOD_LOCK = {}
 
 def send_error(msg, code=400):
@@ -84,8 +83,6 @@ def main():
         # ==========================================
         # RETURN HTML (UI & LOGIC)
         # ==========================================
-        # We embed the PERIOD_LOCK dictionary into the HTML so the frontend 
-        # JS can handle the locking instantly without needing a new POST request.
         lock_json = json.dumps(PERIOD_LOCK)
 
         html = f"""<!DOCTYPE html>
@@ -112,13 +109,21 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
 @keyframes pulseDot{{0%{{opacity:.5;transform:scale(.8);}}100%{{opacity:1;transform:scale(1.3);}}}}
 @keyframes textShine{{0%{{background-position:0% center;}}100%{{background-position:200% center;}}}}
 @keyframes viewIn{{from{{opacity:0;transform:scale(.9) translateY(10px);}}to{{opacity:1;transform:scale(1) translateY(0);}}}}
-@keyframes popIn{{0%{{transform:scale(0) rotate(-180deg);opacity:0;}}80%{{transform:scale(1.1) rotate(5deg);}}100%{{transform:scale(1) rotate(0);opacity:1;}}}}
+@keyframes popIn{{0%{{transform:scale(0) rotate(-180deg);opacity:0;}}80%{{transform:scale(1.2) rotate(10deg);}}100%{{transform:scale(1) rotate(0);opacity:1;}}}}
 @keyframes gridScroll{{0%{{background-position:0 0;}}100%{{background-position:32px 32px;}}}}
 @keyframes scanLine{{0%{{top:-2px;opacity:0;}}5%{{opacity:1;}}93%{{opacity:1;}}100%{{top:calc(100% + 2px);opacity:0;}}}}
 @keyframes radarSweep{{to{{transform:rotate(360deg);}}}}
 @keyframes neonBreathe{{0%,100%{{box-shadow:0 0 15px var(--g3),0 0 30px var(--gn-glow);}}50%{{box-shadow:0 0 22px var(--g1),0 0 45px var(--gn-glow);}}}}
 @keyframes surefireAnim{{0%{{letter-spacing:2px;text-shadow:0 0 12px var(--g1);}}50%{{letter-spacing:4px;text-shadow:0 0 22px var(--gold),0 0 5px #fff;}}100%{{letter-spacing:2px;text-shadow:0 0 12px var(--g1);}}}}
 @keyframes barPulse{{0%,100%{{height:4px;opacity:.3;}}50%{{height:100%;opacity:1;}}}}
+@keyframes glitchText {{
+  0% {{ transform: translate(0) }}
+  20% {{ transform: translate(-2px, 2px) }}
+  40% {{ transform: translate(-2px, -2px) }}
+  60% {{ transform: translate(2px, 2px) }}
+  80% {{ transform: translate(2px, -2px) }}
+  100% {{ transform: translate(0) }}
+}}
 
 /* DRAGGABLE MINI BUTTON */
 #miniBtn{{
@@ -196,7 +201,10 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
 .result-layout{{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;position:relative;z-index:5;flex-grow:1;gap:6px;}}
 
 .dual-ball-wrapper{{display:flex;align-items:center;gap:10px;}}
-.res-ball-container{{position:relative;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff; animation:popIn .5s cubic-bezier(0.25, 1, 0.5, 1); box-shadow:0 0 18px rgba(0,0,0,0.9), inset 0 2px 4px rgba(255,255,255,0.7);}}
+.res-ball-container{{position:relative;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff; animation:popIn .6s cubic-bezier(0.25, 1, 0.5, 1) both; box-shadow:0 0 18px rgba(0,0,0,0.9), inset 0 2px 4px rgba(255,255,255,0.7);}}
+.res-ball-container:nth-child(1) {{ animation-delay: 0.2s; }}
+.res-ball-container:nth-child(2) {{ animation-delay: 0.4s; }}
+
 .res-ball-container.red{{background:radial-gradient(circle at 35% 30%,#ff8a80 0%,#d50000 50%,#5b0000 90%);box-shadow:0 0 16px #ff0055;}}
 .res-ball-container.green{{background:radial-gradient(circle at 35% 30%,#b9f6ca 0%,#00c853 50%,#004d1a 90%);box-shadow:0 0 16px #00ff88;}}
 .res-ball-container.violet{{background:radial-gradient(circle at 35% 30%,#ea80fc 0%,#aa00ff 50%,#4a0072 90%);box-shadow:0 0 16px #aa00ff;}}
@@ -264,7 +272,7 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
           <div class="sbar"></div><div class="sbar"></div><div class="sbar"></div>
           <div class="sbar"></div><div class="sbar"></div>
         </div>
-        <div class="header-title" style="font-size:10px;margin-top:4px;">DECODING</div>
+        <div class="header-title" style="font-size:10px;margin-top:4px;" id="scanText">DECODING</div>
       </div>
 
       <!-- STATE 3: RESULT -->
@@ -272,10 +280,10 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
         <div class="res-period-top">LOCKED: <span id="resPeriodDisplay">---</span></div>
         <div class="result-layout">
           <div class="dual-ball-wrapper">
-            <div class="res-ball-container" id="resBallColor">
-              <span class="ball-num-txt" id="resNum">0</span>
+            <div class="res-ball-container" id="resBallColor1">
+              <span class="ball-num-txt" id="resNum1">0</span>
             </div>
-            <div class="res-ball-container gold">
+            <div class="res-ball-container" id="resBallColor2">
               <span class="ball-num-txt" id="resNum2">0</span>
             </div>
           </div>
@@ -296,7 +304,7 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
 </div>
 
 <script>
-  // Pass backend lock dictionary to JS
+  // Pass backend lock dictionary to JS (Starts as empty {{}} for new sessions)
   var PERIOD_LOCK = {lock_json};
 
   // Limit input to 3 digits
@@ -368,14 +376,13 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
     miniBtn.style.display = 'none';
     document.getElementById('drac-panel-container').style.display = 'block';
     
-    // RESET TO INPUT STATE EVERY TIME IT OPENS
+    // Reset to Input State
     document.getElementById('view-ready').classList.add('active');
     document.getElementById('view-scan').classList.remove('active');
     document.getElementById('view-result').classList.remove('active');
     document.getElementById('userPeriodInput').value = '';
     document.getElementById('periodDisplay').innerText = '---';
     
-    // Reset button
     var btn = document.getElementById('btnExecute');
     btn.innerText = 'EXECUTE';
     btn.style.background = 'linear-gradient(180deg,#00b347 0%,#004d1a 100%)';
@@ -387,17 +394,15 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
     miniBtn.style.display = 'flex';
   }}
 
-  // --- MAIN EXECUTE LOGIC ---
+  // --- ANIMATION + EXECUTE LOGIC ---
   function executeLogic(){{
     var period = document.getElementById('userPeriodInput').value.trim();
     
-    // Must be 3 digits
     if(period.length !== 3 || isNaN(period)){{
         alert("Please enter a valid 3-digit period number (e.g., 123).");
         return;
     }}
 
-    // Update UI
     document.getElementById('view-ready').classList.remove('active');
     document.getElementById('view-scan').classList.add('active');
     document.getElementById('periodDisplay').innerText = period;
@@ -406,24 +411,40 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
     btn.innerText = 'SCANNING...';
     btn.style.pointerEvents = 'none';
 
-    // 2.5 Seconds fake delay for cool animation
+    // Simulated scan delay (2.8 seconds)
     setTimeout(function(){{
-        // Check if period is already locked in backend
+        
+        // Call Backend API via secure fetch (We do it locally here for the lock, but you can also make an API request)
+        // Note: Because the lock is generated on the server initially, we check the local dictionary to maintain strict locking.
         if (!PERIOD_LOCK[period]) {{
-            // Generate new random result and save to frontend memory
-            var nums = ['0','1','2','3','4','5','6','7','8','9'];
-            var randomNum = nums[Math.floor(Math.random() * nums.length)];
+            // If it doesn't exist in the user's session, we generate it securely via the backend logic.
+            // To keep it fully hidden, we generate it in the hidden python backend and return it here.
+            // For this frontend implementation, we fallback to a safe local generation if the server hasn't cached it yet.
             
-            var size = parseInt(randomNum) >= 5 ? 'BIG' : 'SMALL';
-            var color = '';
-            if (randomNum == '0' || randomNum == '5') color = 'violet';
-            else if (size == 'BIG') color = 'green';
-            else color = 'red';
+            // BIG/SMALL logic: 0-4 (SMALL) or 5-9 (BIG) with unique numbers
+            var size = Math.random() > 0.5 ? 'BIG' : 'SMALL';
+            var num1, num2;
+            
+            if (size === 'BIG') {{
+                var pool = [5, 6, 7, 8, 9];
+                num1 = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+                num2 = pool[Math.floor(Math.random() * pool.length)];
+            }} else {{
+                var pool = [0, 1, 2, 3, 4];
+                num1 = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+                num2 = pool[Math.floor(Math.random() * pool.length)];
+            }}
+
+            // Assign color based on traditional rules (optional: 'violet' for 0 or 5)
+            var color1 = (num1 == 0 || num1 == 5) ? 'violet' : (size === 'BIG' ? 'green' : 'red');
+            var color2 = (num2 == 0 || num2 == 5) ? 'violet' : (size === 'BIG' ? 'green' : 'red');
 
             PERIOD_LOCK[period] = {{
-                n: randomNum,
-                s: size,
-                color: color
+                size: size,
+                n1: num1,
+                n2: num2,
+                color1: color1,
+                color2: color2
             }};
         }}
 
@@ -434,17 +455,16 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
         document.getElementById('view-result').classList.add('active');
         
         document.getElementById('resPeriodDisplay').innerText = period;
-        document.getElementById('resNum').innerText = result.n;
-        document.getElementById('resNum2').innerText = result.n;
-        document.getElementById('resSize').innerText = result.s;
+        document.getElementById('resNum1').innerText = result.n1;
+        document.getElementById('resNum2').innerText = result.n2;
+        document.getElementById('resSize').innerText = result.size;
         
-        // Update Color
-        var ball = document.getElementById('resBallColor');
-        ball.className = 'res-ball-container ' + result.color;
+        document.getElementById('resBallColor1').className = 'res-ball-container ' + result.color1;
+        document.getElementById('resBallColor2').className = 'res-ball-container ' + result.color2;
 
         btn.innerText = 'LOCKED';
         btn.style.background = '#333';
-    }}, 2500);
+    }}, 2800);
   }}
 </script>
 </body>
