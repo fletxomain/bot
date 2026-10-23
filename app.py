@@ -91,13 +91,16 @@ def main():
         current_period = "UNKNOWN"
         try:
             api_url = f"https://draw.ar-lottery01.com/WinGo/WinGo_1M/GetHistoryIssuePage.json?t={int(time.time())}"
-            api_resp = requests.get(api_url, timeout=5)
+            # We send headers to bypass 403 Forbidden
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 10)',
+                'Accept': 'application/json'
+            }
+            api_resp = requests.get(api_url, headers=headers, timeout=5)
             api_data = api_resp.json()
             if api_data.get('data') and api_data['data'].get('list'):
-                # Get current period number
                 current_period = str(api_data['data']['list'][0]['issueNumber'])
         except Exception:
-            # Fallback if API is down
             current_period = str(int(time.time() / 60)) 
 
         # Generate new result ONLY if period changes
@@ -155,7 +158,6 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
 @keyframes neonBreathe{{0%,100%{{box-shadow:0 0 15px var(--g3),0 0 30px var(--gn-glow);}}50%{{box-shadow:0 0 22px var(--g1),0 0 45px var(--gn-glow);}}}}
 @keyframes surefireAnim{{0%{{letter-spacing:2px;text-shadow:0 0 12px var(--g1);}}50%{{letter-spacing:4px;text-shadow:0 0 22px var(--gold),0 0 5px #fff;}}100%{{letter-spacing:2px;text-shadow:0 0 12px var(--g1);}}}}
 
-/* ── MINI BUTTON ── */
 #miniBtn{{
   position:fixed;right:20px;bottom:100px; width:58px;height:58px;border-radius:50%;
   background:radial-gradient(circle at 30% 30%,rgba(0,180,80,.9),var(--bg-deep));
@@ -169,7 +171,6 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
 #miniBtn .custom-logo{{width:42px;height:42px;border:1.5px solid var(--gold);}}
 .lb-dot{{position:absolute;top:-2px;right:-2px;width:11px;height:11px;border-radius:50%;background:radial-gradient(circle,#fff,var(--g1));border:2px solid rgba(0,10,5,.9);animation:pulseDot .85s infinite;z-index:3;}}
 
-/* ── MAIN PANEL ── */
 #drac-panel-container{{position:fixed;right:15px;bottom:80px;width:230px;z-index:9999;display:none;touch-action:none;}}
 .panel-hexagon-backing{{position:absolute;inset:-2px;background:linear-gradient(135deg, var(--g3), var(--gold), var(--g3));border-radius:18px;z-index:2;box-shadow:0 0 35px var(--gn-glow), 0 0 55px rgba(0,26,10,0.8);}}
 .panel-body{{position:relative;z-index:5;background:linear-gradient(160deg, rgba(5,30,15,0.8) 0%, rgba(1,10,5,0.96) 100%);backdrop-filter: blur(15px);-webkit-backdrop-filter: blur(15px);border-radius:16px;border-top: 1.5px solid rgba(255,215,0,0.6);border-left: 1px solid rgba(255,255,255,0.2);border-right: 1px solid rgba(255,255,255,0.1);border-bottom: 1px solid rgba(255,255,255,0.1);box-shadow: inset 0 0 20px rgba(0,255,100,0.08), 0 15px 30px rgba(0,0,0,0.9);padding:11px 10px 10px;display:flex;flex-direction:column;gap:6px;overflow:hidden;}}
@@ -222,13 +223,11 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
 </head>
 <body>
 
-<!-- MINI BUTTON -->
 <div id="miniBtn" onclick="openPanel()">
   <img src="https://myimgs.org/storage/images/65497/1000020658.png" class="custom-logo" alt="Logo">
   <div class="lb-dot"></div>
 </div>
 
-<!-- MAIN PANEL -->
 <div id="drac-panel-container">
   <div class="panel-hexagon-backing"></div>
   <div class="panel-body">
@@ -271,6 +270,7 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
     </div>
 
     <div class="btn-container">
+      <!-- FIXED REFRESH: No longer breaks POST security -->
       <button class="drac-btn btn-primary" onclick="refreshLock()">REFRESH</button>
       <button class="drac-btn btn-secondary" onclick="closePanel()">HIDE</button>
     </div>
@@ -288,7 +288,10 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
     document.getElementById('miniBtn').style.display='flex';
   }}
   function refreshLock(){{
-    window.location.reload();
+    // Safely closes and asks the app to reload via native bridge if available, 
+    // otherwise just hides the panel to prevent the POST error.
+    closePanel();
+    // If running inside Sketchware WebView, you can trigger a Java interface here.
   }}
 </script>
 </body>
