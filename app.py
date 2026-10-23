@@ -443,4 +443,17 @@ body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;fon
         ball.className = 'res-ball-container ' + result.color;
 
         btn.innerText = 'LOCKED';
-        btn.style
+        btn.style.background = '#333';
+    }}, 2500);
+  }}
+</script>
+</body>
+</html>"""
+        return Response(html, mimetype='text/html')
+
+    except Exception as e:
+        return send_error(f"Server Error: {str(e)}", 500)
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
