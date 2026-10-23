@@ -6,6 +6,7 @@ import time
 import base64
 import os
 import requests
+import random
 
 app = Flask(__name__)
 
@@ -19,7 +20,6 @@ MAX_TS_DIFF = 30 # seconds
 KEY = hashlib.sha256(PASSPHRASE.encode('utf-8')).digest()
 
 # In-memory storage for period locking
-# Format: { "period_number": { "number": "7", "size": "BIG", "color": "GREEN" } }
 PERIOD_CACHE = {}
 
 def send_error(msg, code=400):
@@ -31,16 +31,16 @@ def send_error(msg, code=400):
     <title>Access Denied</title>
     <style>
         * {{ margin:0; padding:0; box-sizing:border-box; }}
-        body {{ background:#FCFBF4; color:#1E2022; font-family:-apple-system, sans-serif; 
+        body {{ background:#010a04; color:#fff; font-family:-apple-system, sans-serif; 
                min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }}
-        .card {{ max-width:420px; width:100%; padding:48px 36px; background:#FFFFF0; 
-                border-radius:20px; border:1px solid rgba(63,78,79,.12); 
-                box-shadow:0 20px 60px rgba(30,32,34,.08); text-align:center; }}
+        .card {{ max-width:420px; width:100%; padding:48px 36px; background:rgba(5,20,10,0.9); 
+                border-radius:20px; border:1px solid #ffd700; 
+                box-shadow:0 20px 60px rgba(0,255,136,.08); text-align:center; }}
         .icon {{ width:56px; height:56px; margin:0 auto 24px; border-radius:50%; 
-                background:#FCFBF4; border:1.5px solid rgba(63,78,79,.15); 
-                display:flex; align-items:center; justify-content:center; font-size:24px; color:#3F4E4F; }}
-        h1 {{ font-size:20px; font-weight:600; margin-bottom:10px; color:#1E2022; }}
-        p {{ font-size:14px; color:rgba(30,32,34,.55); }}
+                background:rgba(255,255,255,0.05); border:1.5px solid #ffd700; 
+                display:flex; align-items:center; justify-content:center; font-size:24px; color:#ffd700; }}
+        h1 {{ font-size:20px; font-weight:600; margin-bottom:10px; color:#ffd700; }}
+        p {{ font-size:14px; color:rgba(255,255,255,.7); }}
     </style>
 </head>
 <body>
@@ -55,7 +55,6 @@ def send_error(msg, code=400):
 
 @app.route('/', methods=['GET', 'POST'])
 def main():
-    # 1. Force POST
     if request.method != 'POST':
         return send_error("POST required")
 
@@ -68,8 +67,6 @@ def main():
         iv = base64.b64decode(data['iv'])
         ciphertext = base64.b64decode(data['cipher'])
         tag = base64.b64decode(data['tag'])
-
-        # Reconstruct combined ciphertext + tag for AESGCM
         combined = ciphertext + tag
 
         # Decrypt
@@ -89,36 +86,29 @@ def main():
             return send_error("Request expired")
 
         # ==========================================
-        # FETCH PERIOD & LOCK RESULT LOGIC
+        # FETCH REAL PERIOD & LOCK RESULT
         # ==========================================
         current_period = "UNKNOWN"
         try:
-            api_resp = requests.post(
-                "https://api.bdg88zf.com/api/webapi/GetGameIssue",
-                json={
-                    "typeId": 1, "language": 0,
-                    "random": "40079dcba93a48769c6ee9d4d4fae23f",
-                    "signature": "D12108C4F57C549D82B23A91E0FA20AE",
-                    "timestamp": 1727792520
-                },
-                timeout=5
-            )
+            api_url = f"https://draw.ar-lottery01.com/WinGo/WinGo_1M/GetHistoryIssuePage.json?t={int(time.time())}"
+            api_resp = requests.get(api_url, timeout=5)
             api_data = api_resp.json()
-            if api_data.get('code') == 0 and api_data.get('data'):
-                current_period = str(api_data['data'].get('issueNumber', 'UNKNOWN'))
+            if api_data.get('data') and api_data['data'].get('list'):
+                # Get current period number
+                current_period = str(api_data['data']['list'][0]['issueNumber'])
         except Exception:
-            pass # If API fails, use UNKNOWN
+            # Fallback if API is down
+            current_period = str(int(time.time() / 60)) 
 
-        # If period is new or not in cache, generate a new result
+        # Generate new result ONLY if period changes
         if current_period not in PERIOD_CACHE:
             LOGIC = {
-                0: {'n': '5', 's': 'BIG'}, 1: {'n': '2', 's': 'SMALL'},
-                2: {'n': '4', 's': 'SMALL'}, 3: {'n': '7', 's': 'BIG'},
-                4: {'n': '8', 's': 'BIG'}, 5: {'n': '9', 's': 'BIG'},
-                6: {'n': '0', 's': 'SMALL'}, 7: {'n': '3', 's': 'SMALL'},
-                8: {'n': '6', 's': 'BIG'}, 9: {'n': '1', 's': 'SMALL'}
+                0: {'n': '5', 's': 'BIG', 'color': 'violet'}, 1: {'n': '2', 's': 'SMALL', 'color': 'red'},
+                2: {'n': '4', 's': 'SMALL', 'color': 'red'}, 3: {'n': '7', 's': 'BIG', 'color': 'green'},
+                4: {'n': '8', 's': 'BIG', 'color': 'red'}, 5: {'n': '9', 's': 'BIG', 'color': 'green'},
+                6: {'n': '0', 's': 'SMALL', 'color': 'violet'}, 7: {'n': '3', 's': 'SMALL', 'color': 'green'},
+                8: {'n': '6', 's': 'BIG', 'color': 'red'}, 9: {'n': '1', 's': 'SMALL', 'color': 'green'}
             }
-            import random
             k = random.choice(list(LOGIC.keys()))
             res = LOGIC[k]
             
@@ -126,160 +116,180 @@ def main():
                 'period': current_period,
                 'number': res['n'],
                 'size': res['s'],
-                'color': 'GREEN' if res['s'] == 'BIG' else 'RED'
+                'color': res['color']
             }
 
-        locked_result = PERIOD_CACHE[current_period]
+        locked = PERIOD_CACHE[current_period]
 
         # ==========================================
-        # RETURN HTML
+        # RETURN HTML (CRAVAULT THEME)
         # ==========================================
         html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
-<title>𝑪𝑹𝑨𝑽𝑨𝑼𝑳𝑻 𝑷𝑹𝑬𝑴𝑰𝑼𝑴 𝑨𝑰 ™</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<title>CRAVAULT PREMIUM AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@1,800;1,900&family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
-* {{ margin:0; padding:0; box-sizing:border-box; -webkit-font-smoothing:antialiased; }}
-:root {{
-  --bg:#FCFBF4; --surface:#FFFFF0; --ink:#1E2022; --accent:#3F4E4F;
-  --muted:rgba(30,32,34,.48); --line:rgba(63,78,79,.14);
-  --green:#3F4E4F; --red:#B85C4A;
+:root{{
+  --g1: #00ff88;  --g2: #00b347;  --g3: #004d1a;  --g4: #001a0a;
+  --gold: #ffd700; --cyan: #00f0ff;
+  --bg-deep: #010a04; 
+  --gn-glow: rgba(0, 255, 136, 0.45);   
+  --gold-glow: rgba(255, 215, 0, 0.55);
 }}
-body {{
-  background:var(--bg); color:var(--ink); font-family:'Inter', system-ui, sans-serif;
-  min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
-  position:relative; overflow:hidden;
+*{{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-tap-highlight-color:transparent;}}
+body{{margin:0;height:100vh;overflow:hidden;background:transparent!important;font-family:'Rajdhani',sans-serif;color:#fff;}}
+
+@keyframes spin{{to{{transform:rotate(360deg);}}}}
+@keyframes spinR{{to{{transform:rotate(-360deg);}}}}
+@keyframes float{{0%,100%{{transform:translateY(0);}}50%{{transform:translateY(-8px);}}}}
+@keyframes pulseDot{{0%{{opacity:.5;transform:scale(.8);}}100%{{opacity:1;transform:scale(1.3);}}}}
+@keyframes textShine{{0%{{background-position:0% center;}}100%{{background-position:200% center;}}}}
+@keyframes viewIn{{from{{opacity:0;transform:scale(.9) translateY(10px);}}to{{opacity:1;transform:scale(1) translateY(0);}}}}
+@keyframes popIn{{0%{{transform:scale(0) rotate(-180deg);opacity:0;}}80%{{transform:scale(1.1) rotate(5deg);}}100%{{transform:scale(1) rotate(0);opacity:1;}}}}
+@keyframes gridScroll{{0%{{background-position:0 0;}}100%{{background-position:32px 32px;}}}}
+@keyframes scanLine{{0%{{top:-2px;opacity:0;}}5%{{opacity:1;}}93%{{opacity:1;}}100%{{top:calc(100% + 2px);opacity:0;}}}}
+@keyframes radarSweep{{to{{transform:rotate(360deg);}}}}
+@keyframes neonBreathe{{0%,100%{{box-shadow:0 0 15px var(--g3),0 0 30px var(--gn-glow);}}50%{{box-shadow:0 0 22px var(--g1),0 0 45px var(--gn-glow);}}}}
+@keyframes surefireAnim{{0%{{letter-spacing:2px;text-shadow:0 0 12px var(--g1);}}50%{{letter-spacing:4px;text-shadow:0 0 22px var(--gold),0 0 5px #fff;}}100%{{letter-spacing:2px;text-shadow:0 0 12px var(--g1);}}}}
+
+/* ── MINI BUTTON ── */
+#miniBtn{{
+  position:fixed;right:20px;bottom:100px; width:58px;height:58px;border-radius:50%;
+  background:radial-gradient(circle at 30% 30%,rgba(0,180,80,.9),var(--bg-deep));
+  border:2px solid var(--gold); box-shadow:0 0 22px var(--gn-glow),0 0 45px var(--gold-glow),inset 0 4px 6px rgba(255,255,255,0.4);
+  cursor:pointer;z-index:9998; display:flex;align-items:center;justify-content:center;
+  animation:float 3.5s ease-in-out infinite, neonBreathe 3s ease-in-out infinite; touch-action:none;
 }}
-body::before {{
-  content:''; position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.025;
-  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}}
-body::after {{
-  content:''; position:fixed; top:-20%; left:50%; transform:translateX(-50%);
-  width:120%; height:60%; z-index:0; pointer-events:none;
-  background:radial-gradient(ellipse at 50% 0%, rgba(63,78,79,.04), transparent 70%);
-}}
-.card {{
-  position:relative; z-index:10; width:100%; max-width:380px;
-  background:var(--surface); border-radius:24px; border:1px solid var(--line);
-  box-shadow:0 30px 80px rgba(30,32,34,.07), 0 8px 24px rgba(30,32,34,.04), inset 0 1px 0 rgba(255,255,255,.6);
-  padding:40px 32px 32px; overflow:hidden;
-}}
-.card::before {{
-  content:''; position:absolute; top:0; left:0; right:0; height:2px;
-  background:linear-gradient(90deg, transparent, var(--accent), transparent); opacity:.35;
-}}
-.brand {{ text-align:center; margin-bottom:32px; }}
-.brand-mark {{
-  width:52px; height:52px; margin:0 auto 18px; border-radius:16px;
-  background:var(--surface); border:1.5px solid var(--line);
-  display:flex; align-items:center; justify-content:center; position:relative;
-}}
-.brand-mark::after {{ content:''; position:absolute; inset:5px; border-radius:11px; border:1px solid var(--line); opacity:.5; }}
-.brand-mark span {{ font-family:'Playfair Display', serif; font-size:24px; font-weight:700; color:var(--accent); position:relative; z-index:1; }}
-.brand-name {{ font-family:'Playfair Display', serif; font-size:16px; font-weight:600; letter-spacing:.5px; color:var(--ink); line-height:1.4; }}
-.brand-name .tm {{ font-family:'Inter', sans-serif; font-size:9px; font-weight:500; vertical-align:super; color:var(--muted); }}
-.brand-sub {{ font-size:10px; font-weight:500; letter-spacing:2.5px; text-transform:uppercase; color:var(--muted); margin-top:8px; }}
-.status-row {{
-  display:flex; align-items:center; justify-content:space-between; padding:10px 14px;
-  background:var(--bg); border:1px solid var(--line); border-radius:10px;
-  margin-bottom:28px; font-size:10px; font-weight:500; letter-spacing:.6px; color:var(--muted);
-}}
-.status-left {{ display:flex; align-items:center; gap:7px; }}
-.dot {{ width:6px; height:6px; border-radius:50%; background:var(--accent); animation:pulseDot 2s infinite; }}
-@keyframes pulseDot {{ 0%{{box-shadow:0 0 0 0 rgba(63,78,79,.35);}} 70%{{box-shadow:0 0 0 6px rgba(63,78,79,0);}} 100%{{box-shadow:0 0 0 0 rgba(63,78,79,0);}} }}
-.status-online {{ color:var(--accent); font-weight:600; }}
-.clock {{ font-family:monospace; font-size:10px; opacity:.55; }}
-.prediction {{
-  background:var(--bg); border:1px solid var(--line); border-radius:16px;
-  padding:24px 20px 20px; margin-bottom:24px; text-align:center; position:relative;
-}}
-.prediction::before {{ content:''; position:absolute; top:0; left:20%; right:20%; height:1.5px; background:linear-gradient(90deg, transparent, var(--accent), transparent); opacity:.5; }}
-.period-label {{ font-size:9.5px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }}
-.period-value {{ font-family:'Playfair Display', serif; font-size:22px; font-weight:600; color:var(--ink); letter-spacing:1px; margin-bottom:22px; }}
-.number-stage {{ display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:20px; }}
-.num-arrow {{ font-size:12px; color:var(--accent); opacity:.4; letter-spacing:-1px; }}
-.num-main {{
-  width:92px; height:92px; border-radius:50%; background:var(--surface); border:2px solid var(--accent);
-  display:flex; align-items:center; justify-content:center;
-  box-shadow:0 8px 28px rgba(63,78,79,.12), inset 0 2px 6px rgba(255,255,255,.6);
-  transition:transform .3s cubic-bezier(.34,1.56,.64,1);
-}}
-.num-main::after {{ content:''; position:absolute; inset:6px; border-radius:50%; border:1px solid var(--line); }}
-.num-main span {{ font-family:'Playfair Display', serif; font-size:40px; font-weight:700; color:var(--accent); line-height:1; }}
-.num-main.pop {{ animation:numPop .45s cubic-bezier(.34,1.56,.64,1); }}
-@keyframes numPop {{ 0%{{transform:scale(1);}} 50%{{transform:scale(1.08);}} 100%{{transform:scale(1);}} }}
-.result-row {{ display:flex; justify-content:center; gap:10px; }}
-.pill {{
-  display:flex; align-items:center; gap:6px; padding:7px 16px;
-  border-radius:20px; font-size:11px; font-weight:600; letter-spacing:1px;
-  text-transform:uppercase; border:1px solid var(--line); background:var(--surface);
-  transition:all .3s ease;
-}}
-.pill .pdot {{ width:6px; height:6px; border-radius:50%; background:currentColor; }}
-.pill.big {{ color:var(--green); border-color:rgba(63,78,79,.3); }}
-.pill.small {{ color:var(--red); border-color:rgba(184,92,74,.3); }}
-.btn-row {{ display:flex; gap:12px; }}
-.btn {{
-  flex:1; padding:14px 0; border-radius:12px; font-family:'Inter', sans-serif;
-  font-size:12px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase;
-  border:none; cursor:pointer; transition:transform .15s ease, box-shadow .25s ease, background .25s ease;
-}}
-.btn:active {{ transform:scale(.97); }}
-.btn-primary {{ background:var(--accent); color:var(--surface); box-shadow:0 8px 24px rgba(63,78,79,.25); }}
-.btn-primary:hover {{ background:#354143; box-shadow:0 12px 32px rgba(63,78,79,.35); }}
-.btn-secondary {{ background:var(--surface); color:var(--accent); border:1.5px solid var(--line); }}
-.btn-secondary:hover {{ background:var(--bg); border-color:rgba(63,78,79,.3); }}
-.footer {{
-  text-align:center; margin-top:28px; padding-top:20px; border-top:1px solid var(--line);
-  font-size:9px; font-weight:500; letter-spacing:1.8px; text-transform:uppercase; color:var(--muted);
-}}
-.footer strong {{ color:var(--accent); font-weight:600; }}
+#miniBtn::before{{content:'';position:absolute;inset:-5px;border-radius:50%;border:1.5px dashed var(--gold);animation:spin 8s linear infinite;pointer-events:none;}}
+#miniBtn::after{{content:'';position:absolute;inset:-10px;border-radius:50%;border:1px solid rgba(0,255,136,.5);animation:spinR 12s linear infinite;pointer-events:none;}}
+.custom-logo{{border-radius:50%;object-fit:cover;border:1.5px solid #fff;width:100%;height:100%;}}
+#miniBtn .custom-logo{{width:42px;height:42px;border:1.5px solid var(--gold);}}
+.lb-dot{{position:absolute;top:-2px;right:-2px;width:11px;height:11px;border-radius:50%;background:radial-gradient(circle,#fff,var(--g1));border:2px solid rgba(0,10,5,.9);animation:pulseDot .85s infinite;z-index:3;}}
+
+/* ── MAIN PANEL ── */
+#drac-panel-container{{position:fixed;right:15px;bottom:80px;width:230px;z-index:9999;display:none;touch-action:none;}}
+.panel-hexagon-backing{{position:absolute;inset:-2px;background:linear-gradient(135deg, var(--g3), var(--gold), var(--g3));border-radius:18px;z-index:2;box-shadow:0 0 35px var(--gn-glow), 0 0 55px rgba(0,26,10,0.8);}}
+.panel-body{{position:relative;z-index:5;background:linear-gradient(160deg, rgba(5,30,15,0.8) 0%, rgba(1,10,5,0.96) 100%);backdrop-filter: blur(15px);-webkit-backdrop-filter: blur(15px);border-radius:16px;border-top: 1.5px solid rgba(255,215,0,0.6);border-left: 1px solid rgba(255,255,255,0.2);border-right: 1px solid rgba(255,255,255,0.1);border-bottom: 1px solid rgba(255,255,255,0.1);box-shadow: inset 0 0 20px rgba(0,255,100,0.08), 0 15px 30px rgba(0,0,0,0.9);padding:11px 10px 10px;display:flex;flex-direction:column;gap:6px;overflow:hidden;}}
+
+.header-row{{display:flex;justify-content:space-between;align-items:center;position:relative;z-index:10;padding:0 2px;}}
+.header-title{{font-family:'Orbitron',sans-serif;font-weight:900;font-size:12px;letter-spacing:1.2px;background:linear-gradient(90deg, #fff 0%, var(--gold) 40%, var(--g1) 70%, #fff 100%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:textShine 3.5s linear infinite;filter:drop-shadow(0 0 6px rgba(255,215,0,0.5));}}
+.mode-badge{{background:rgba(255,255,255,.12);border:1px solid var(--gold);border-radius:10px;padding:2px 7px;display:flex;align-items:center;gap:4px;box-shadow:0 0 8px rgba(255,215,0,.3);}}
+.mode-dot{{width:5px;height:5px;border-radius:50%;background:var(--g1);box-shadow:0 0 6px var(--g1);animation:pulseDot 1s infinite alternate;}}
+.mode-text{{font-family:'Share Tech Mono',monospace;font-size:7px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#fff;}}
+
+.period-box{{position:relative;z-index:10;text-align:center;border:1px solid rgba(255,215,0,0.35);border-radius:6px;padding:3px 0;background:linear-gradient(90deg,transparent,rgba(0,255,136,.12),transparent);}}
+.period-box::before,.period-box::after{{content:'';position:absolute;top:50%;transform:translateY(-50%);width:3px;height:3px;border-radius:50%;background:var(--gold);box-shadow:0 0 6px var(--gold);}}
+.period-box::before{{left:8px;}} .period-box::after{{right:8px;}}
+.period-text{{font-family:'Share Tech Mono',monospace;font-size:8px;font-weight:700;letter-spacing:2px;color:#fff;}}
+
+.screen-area{{position:relative;z-index:10;background:linear-gradient(170deg,rgba(2,10,5,.7) 0%,rgba(5,20,10,.85) 100%);border-radius:12px;border:1px solid rgba(255,255,255,0.15);border-top: 1px solid rgba(255,215,0,0.4);min-height:155px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:inset 0 0 35px rgba(0,0,0,.85),0 4px 14px rgba(0,0,0,.5);overflow:hidden;}}
+.screen-area::before{{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:16px 16px;animation:gridScroll 15s linear infinite;pointer-events:none;z-index:0;}}
+.screen-scan-stripe{{position:absolute;left:0;width:100%;height:1.5px;background:linear-gradient(90deg,transparent,var(--gold) 40%,#fff 50%,var(--g1) 60%,transparent);box-shadow:0 0 10px #fff,0 0 20px var(--g1);animation:scanLine 3.5s linear infinite;top:-2px;pointer-events:none;z-index:4;}}
+.radar-sweep{{position:absolute;top:50%;left:50%;width:200%;height:200%;background:conic-gradient(from 0deg,transparent 75%,rgba(255,215,0,.05) 88%,rgba(0,230,92,.18) 100%);transform-origin:0 0;animation:radarSweep 3.5s linear infinite;z-index:2;pointer-events:none;}}
+
+.bracket{{position:absolute;width:10px;height:10px;border-color:rgba(255,215,0,.6);border-style:solid;z-index:15;}}
+.bracket.tl{{top:6px;left:6px;border-width:2px 0 0 2px;}} .bracket.tr{{top:6px;right:6px;border-width:2px 2px 0 0;}}
+.bracket.bl{{bottom:6px;left:6px;border-width:0 0 2px 2px;}} .bracket.br{{bottom:6px;right:6px;border-width:0 2px 2px 0;}}
+
+.view-state{{display:flex;flex-direction:column;align-items:center;width:100%;height:100%;text-align:center;position:relative;z-index:20;justify-content:center;gap:4px;animation:viewIn .5s cubic-bezier(0.25, 1, 0.5, 1) forwards;}}
+
+#view-result{{justify-content:space-between;padding:4px 2px;}}
+.res-period-top{{font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:900;color:#fff;letter-spacing:1.5px;border-bottom:1px solid rgba(255,215,0,.4);padding-bottom:3px;width:90%;text-align:center;margin-bottom:3px;}}
+.res-period-top span{{color:var(--gold);}}
+.result-layout{{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;position:relative;z-index:5;flex-grow:1;gap:6px;}}
+
+.dual-ball-wrapper{{display:flex;align-items:center;gap:10px;}}
+.res-ball-container{{position:relative;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff; animation:popIn .5s cubic-bezier(0.25, 1, 0.5, 1); box-shadow:0 0 18px rgba(0,0,0,0.9), inset 0 2px 4px rgba(255,255,255,0.7);}}
+.res-ball-container.red{{background:radial-gradient(circle at 35% 30%,#ff8a80 0%,#d50000 50%,#5b0000 90%);box-shadow:0 0 16px #ff0055;}}
+.res-ball-container.green{{background:radial-gradient(circle at 35% 30%,#b9f6ca 0%,#00c853 50%,#004d1a 90%);box-shadow:0 0 16px #00ff88;}}
+.res-ball-container.violet{{background:radial-gradient(circle at 35% 30%,#ea80fc 0%,#aa00ff 50%,#4a0072 90%);box-shadow:0 0 16px #aa00ff;}}
+.res-ball-container.gold{{background:radial-gradient(circle at 35% 30%,#fff59d 0%,#fbc02d 50%,#f57f17 90%);box-shadow:0 0 16px #ffd700;}}
+.ball-num-txt{{font-family:'Orbitron',sans-serif;font-size:16px;font-weight:900;color:#fff;text-shadow:0 2px 4px rgba(0,0,0,.9);}}
+
+.conf-pill-tag{{font-family:'Share Tech Mono',monospace;font-size:7px;font-weight:800;color:var(--cyan);background:rgba(0,0,0,0.65);padding:1px 6px;border-radius:6px;border:1px solid rgba(0,240,255,0.35);text-shadow:0 0 6px var(--cyan);}}
+
+.res-sureshot-banner{{font-family:'Orbitron',sans-serif;font-size:11px;font-weight:900;border:1.2px solid rgba(255,215,0,.7);padding:4px 14px;border-radius:10px;background:linear-gradient(180deg,rgba(255,215,0,.25) 0%,rgba(0,0,0,.6) 100%);box-shadow:0 0 16px var(--gold-glow);text-shadow:0 0 10px var(--gold);text-transform:uppercase;letter-spacing:2px;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;animation:surefireAnim 2.5s ease-in-out infinite;}}
+
+.btn-container{{display:flex;gap:6px;position:relative;z-index:10;}}
+.drac-btn{{flex:1;padding:9px 4px;border:none;border-radius:10px;font-family:'Orbitron',sans-serif;font-size:8px;font-weight:900;letter-spacing:1.2px;cursor:pointer;text-transform:uppercase;color:#fff;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;gap:4px;transition:all .2s ease;}}
+.drac-btn:active{{transform:scale(.94);}}
+.btn-primary{{background:linear-gradient(180deg,#00b347 0%,#004d1a 100%);border:1.2px solid var(--gold);flex:1.8;box-shadow:0 0 12px var(--gn-glow);text-shadow:0 1px 3px rgba(0,0,0,0.8);}}
+.btn-secondary{{background:linear-gradient(180deg,rgba(255,255,255,.15) 0%,rgba(255,255,255,.05) 100%);color:#fff;border:1px solid rgba(255,255,255,.3);}}
 </style>
 </head>
 <body>
-<div class="card">
-  <div class="brand">
-    <div class="brand-mark"><span>C</span></div>
-    <div class="brand-name">𝑪𝑹𝑨𝑽𝑨𝑼𝑳𝑻 𝑷𝑹𝑬𝑴𝑰𝑼𝑴 𝑨𝑰<span class="tm">™</span></div>
-    <div class="brand-sub">Intelligence Engine</div>
-  </div>
-  <div class="status-row">
-    <div class="status-left"><span class="dot"></span><span>Secure Link</span></div>
-    <div>Status <span class="status-online">Online</span></div>
-    <div class="clock" id="clock">--:--:--</div>
-  </div>
-  <div class="prediction">
-    <div class="period-label">Current Period</div>
-    <div class="period-value" id="periodVal">{locked_result['period'][-5:]}</div>
-    <div class="number-stage">
-      <span class="num-arrow">‹‹</span>
-      <div class="num-main pop"><span>{locked_result['number']}</span></div>
-      <span class="num-arrow">››</span>
-    </div>
-    <div class="result-row">
-      <div class="pill {'big' if locked_result['size']=='BIG' else 'small'}">
-        <span class="pdot"></span><span>{locked_result['size']}</span>
-      </div>
-      <div class="pill {'big' if locked_result['size']=='BIG' else 'small'}">
-        <span class="pdot"></span><span>{locked_result['color']}</span>
-      </div>
-    </div>
-  </div>
-  <div class="footer">2026 <strong>𝑪𝑹𝑨𝑽𝑨𝑼𝑳𝑻 𝑷𝑹𝑬𝑴𝑰𝑼𝑴 𝑨𝑰 ™</strong> · All Rights Reserved</div>
+
+<!-- MINI BUTTON -->
+<div id="miniBtn" onclick="openPanel()">
+  <img src="https://myimgs.org/storage/images/65497/1000020658.png" class="custom-logo" alt="Logo">
+  <div class="lb-dot"></div>
 </div>
+
+<!-- MAIN PANEL -->
+<div id="drac-panel-container">
+  <div class="panel-hexagon-backing"></div>
+  <div class="panel-body">
+    
+    <div class="header-row">
+      <div class="header-title">CRAVAULT AI</div>
+      <div class="mode-badge">
+        <div class="mode-dot"></div>
+        <div class="mode-text">2-LEVEL</div>
+      </div>
+    </div>
+    
+    <div class="period-box" id="mainPeriodBox">
+      <div class="period-text">PERIOD : <span id="periodDisplay">{locked['period'][-4:]}</span></div>
+    </div>
+
+    <div class="screen-area">
+      <div class="screen-scan-stripe"></div>
+      <div class="radar-sweep"></div>
+      <div class="bracket tl"></div><div class="bracket tr"></div>
+      <div class="bracket bl"></div><div class="bracket br"></div>
+
+      <div class="view-state" id="view-result">
+        <div class="res-period-top">LOCKED: <span>{locked['period'][-4:]}</span></div>
+        <div class="result-layout">
+          <div class="dual-ball-wrapper">
+            <div class="res-ball-container {locked['color']}" id="resBall1">
+              <span class="ball-num-txt">{locked['number']}</span>
+            </div>
+            <div class="res-ball-container gold" id="resBall2">
+              <span class="ball-num-txt">{locked['number']}</span>
+            </div>
+          </div>
+          <div class="conf-pill-tag">CONF: 98.6% | L1: 85% L2: 90%</div>
+          <div class="res-sureshot-banner">
+            <span>{locked['size']}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-container">
+      <button class="drac-btn btn-primary" onclick="refreshLock()">REFRESH</button>
+      <button class="drac-btn btn-secondary" onclick="closePanel()">HIDE</button>
+    </div>
+
+  </div>
+</div>
+
 <script>
-  function tick() {{
-    var n = new Date();
-    document.getElementById('clock').textContent = 
-      String(n.getHours()).padStart(2,'0') + ':' + 
-      String(n.getMinutes()).padStart(2,'0') + ':' + 
-      String(n.getSeconds()).padStart(2,'0');
+  function openPanel(){{
+    document.getElementById('miniBtn').style.display='none';
+    document.getElementById('drac-panel-container').style.display='block';
   }}
-  setInterval(tick, 1000); tick();
+  function closePanel(){{
+    document.getElementById('drac-panel-container').style.display='none';
+    document.getElementById('miniBtn').style.display='flex';
+  }}
+  function refreshLock(){{
+    window.location.reload();
+  }}
 </script>
 </body>
 </html>"""
